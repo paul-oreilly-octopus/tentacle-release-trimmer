@@ -50,12 +50,10 @@ function ConvertTo-SortableVersion([string]$VersionString) {
 }
 
 function Get-FolderSizeMB([string]$FolderPath) {
-    $bytes = (
-        Get-ChildItem -Path $FolderPath -Recurse -File -ErrorAction SilentlyContinue |
-        Measure-Object -Property Length -Sum
-    ).Sum
-    if ($bytes) { return [math]::Round($bytes / 1MB, 1) }
-    return 0
+    $bytes = 0L
+    Get-ChildItem -Path $FolderPath -Recurse -File -ErrorAction SilentlyContinue |
+        ForEach-Object { $bytes += $_.Length }
+    return [math]::Round($bytes / 1MB, 1)
 }
 
 function Write-Section([string]$Text) {
@@ -134,7 +132,7 @@ foreach ($envDir in $environments) {
         $groups = [ordered]@{}
         foreach ($dir in $releaseDirs) {
             $base = Get-BaseVersion $dir.Name
-            if (-not $groups.ContainsKey($base)) {
+            if (-not $groups.Contains($base)) {
                 $groups[$base] = [System.Collections.Generic.List[System.IO.DirectoryInfo]]::new()
             }
             $groups[$base].Add($dir)
@@ -152,8 +150,9 @@ foreach ($envDir in $environments) {
         Write-Section "$($envDir.Name) / $($projectDir.Name)"
 
         foreach ($base in $keepBases) {
-            $folders = $groups[$base] | Sort-Object Name
-            $sizeMB  = ($folders | ForEach-Object { Get-FolderSizeMB $_.FullName } | Measure-Object -Sum).Sum
+            $folders = @($groups[$base] | Sort-Object Name)
+            $sizeMB  = 0.0
+            $folders | ForEach-Object { $sizeMB += Get-FolderSizeMB $_.FullName }
             $names   = ($folders | Select-Object -ExpandProperty Name) -join ', '
             Write-Keep "$base  [$names]  $([math]::Round($sizeMB, 1)) MB"
         }
